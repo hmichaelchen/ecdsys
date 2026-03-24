@@ -9,6 +9,11 @@ frontend/dist/
 
 # npm锁文件
 frontend/package-lock.json
+package-lock.json
+
+# node_modules目录
+node_modules/
+frontend/node_modules/
 
 # 日志文件
 logs/
