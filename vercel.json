@@ -1,17 +1,14 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
-    }
-  ],
   "functions": {
     "src/app.py": {
       "runtime": "@vercel/python@3.9"
+    },
+    "frontend/package.json": {
+      "runtime": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
     }
   },
   "routes": [
