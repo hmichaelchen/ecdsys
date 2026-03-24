@@ -11,13 +11,24 @@ from src.models import CrawledItem
 class DatabaseManager:
     """数据库管理器，用于存储和查询爬取的数据"""
     
+    _instance = None
+    
+    def __new__(cls, *args, **kwargs):
+        """单例模式，确保整个应用只有一个数据库实例"""
+        if cls._instance is None:
+            cls._instance = super(DatabaseManager, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
     def __init__(self, db_path: str = ":memory:"):
         """初始化数据库连接"""
-        # 完全使用内存数据库，不再创建文件
-        self.db_path = ":memory:"
-        logger.info("使用内存数据库")
-        
-        self._init_database()
+        if not hasattr(self, '_initialized') or not self._initialized:
+            # 完全使用内存数据库，不再创建文件
+            self.db_path = ":memory:"
+            logger.info("使用内存数据库")
+            
+            self._init_database()
+            self._initialized = True
     
     def _init_database(self):
         """初始化数据库表结构"""
