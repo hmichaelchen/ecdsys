@@ -2,10 +2,6 @@
   "version": 2,
   "builds": [
     {
-      "src": "src/app.py",
-      "use": "@vercel/python"
-    },
-    {
       "src": "frontend/package.json",
       "use": "@vercel/static-build",
       "config": {
@@ -13,10 +9,19 @@
       }
     }
   ],
+  "functions": {
+    "src/app.py": {
+      "runtime": "@vercel/python@3.9"
+    }
+  },
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "/api/(.*)",
       "dest": "src/app.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "frontend/dist/$1"
     }
   ]
 }
