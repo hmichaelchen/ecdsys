@@ -3,10 +3,7 @@
   "builds": [
     {
       "src": "src/app.py",
-      "use": "@vercel/python",
-      "config": {
-        "runtime": "python3.9"
-      }
+      "use": "@vercel/python@3"
     },
     {
       "src": "frontend/package.json",
@@ -18,12 +15,8 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "src/app.py"
-    },
-    {
       "src": "/(.*)",
-      "dest": "frontend/dist/$1"
+      "dest": "src/app.py"
     }
   ]
 }

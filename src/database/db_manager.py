@@ -1,3 +1,5 @@
+import psycopg2
+import psycopg2.extras
 import sqlite3
 import json
 import os
@@ -13,19 +15,25 @@ class DatabaseManager:
     
     _instance = None
     
-    def __new__(cls, db_path: str = ":memory:"):
+    def __new__(cls, db_url: str = None):
         """单例模式，确保整个应用使用同一个数据库连接"""
         if cls._instance is None:
             cls._instance = super(DatabaseManager, cls).__new__(cls)
-            # 完全使用内存数据库，不再创建文件
-            cls._instance.db_path = ":memory:"
-            logger.info("使用内存数据库")
+            # 使用PostgreSQL数据库
+            if db_url:
+                cls._instance.db_url = db_url
+            else:
+                cls._instance.db_url = os.environ.get(
+                    "DATABASE_URL",
+                    "postgresql://neondb_owner:npg_Z5XNw8CHyFIa@ep-muddy-rice-a4vlmjzs-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+                )
+            logger.info(f"使用PostgreSQL数据库: {cls._instance.db_url}")
             cls._instance._init_database()
         return cls._instance
     
     def _init_database(self):
         """初始化数据库表结构"""
-        conn = sqlite3.connect(self.db_path)
+        conn = psycopg2.connect(self.db_url)
         cursor = conn.cursor()
         
         # 创建商品表
@@ -66,18 +74,25 @@ class DatabaseManager:
         
         conn.commit()
         conn.close()
-        logger.info(f"数据库初始化完成: {self.db_path}")
+        logger.info(f"数据库初始化完成")
     
     def insert_item(self, item: CrawledItem) -> bool:
         """插入单个商品数据"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = psycopg2.connect(self.db_url)
             cursor = conn.cursor()
             
             cursor.execute('''
-                INSERT OR REPLACE INTO crawled_items (
+                INSERT INTO crawled_items (
                     id, title, url, source, publish_time, crawled_at, detail_data
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    url = EXCLUDED.url,
+                    source = EXCLUDED.source,
+                    publish_time = EXCLUDED.publish_time,
+                    crawled_at = EXCLUDED.crawled_at,
+                    detail_data = EXCLUDED.detail_data
             ''', (
                 item.id,
                 item.title,
@@ -101,7 +116,7 @@ class DatabaseManager:
             return 0
         
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = psycopg2.connect(self.db_url)
             cursor = conn.cursor()
             
             data = []
@@ -116,11 +131,20 @@ class DatabaseManager:
                     json.dumps(item.detail_data, ensure_ascii=False) if item.detail_data else '{}'
                 ))
             
-            cursor.executemany('''
-                INSERT OR REPLACE INTO crawled_items (
+            args_str = ','.join(cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s)", x).decode('utf-8') for x in data)
+            
+            cursor.execute(f'''
+                INSERT INTO crawled_items (
                     id, title, url, source, publish_time, crawled_at, detail_data
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', data)
+                ) VALUES {args_str}
+                ON CONFLICT (id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    url = EXCLUDED.url,
+                    source = EXCLUDED.source,
+                    publish_time = EXCLUDED.publish_time,
+                    crawled_at = EXCLUDED.crawled_at,
+                    detail_data = EXCLUDED.detail_data
+            ''')
             
             conn.commit()
             conn.close()
@@ -133,14 +157,13 @@ class DatabaseManager:
     def get_items(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """获取商品列表"""
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            conn = psycopg2.connect(self.db_url)
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             
             cursor.execute('''
                 SELECT * FROM crawled_items 
                 ORDER BY created_at DESC 
-                LIMIT ? OFFSET ?
+                LIMIT %s OFFSET %s
             ''', (limit, offset))
             
             rows = cursor.fetchall()
@@ -189,11 +212,10 @@ class DatabaseManager:
     def get_item_by_id(self, item_id: str) -> Optional[Dict[str, Any]]:
         """根据ID获取商品详情"""
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            conn = psycopg2.connect(self.db_url)
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             
-            cursor.execute('SELECT * FROM crawled_items WHERE id = ?', (item_id,))
+            cursor.execute('SELECT * FROM crawled_items WHERE id = %s', (item_id,))
             row = cursor.fetchone()
             
             if row:
@@ -203,6 +225,7 @@ class DatabaseManager:
                     item['detail_data'] = json.loads(item['detail_data'])
                 except:
                     item['detail_data'] = {}
+                conn.close()
                 return item
             
             conn.close()
@@ -214,15 +237,14 @@ class DatabaseManager:
     def get_items_by_keyword(self, keyword: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """根据关键字搜索商品"""
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            conn = psycopg2.connect(self.db_url)
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             
             cursor.execute('''
                 SELECT * FROM crawled_items 
-                WHERE title LIKE ? OR detail_data LIKE ?
+                WHERE title LIKE %s OR detail_data LIKE %s
                 ORDER BY created_at DESC 
-                LIMIT ? OFFSET ?
+                LIMIT %s OFFSET %s
             ''', (f'%{keyword}%', f'%{keyword}%', limit, offset))
             
             rows = cursor.fetchall()
@@ -271,7 +293,7 @@ class DatabaseManager:
     def get_total_count(self) -> int:
         """获取商品总数"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = psycopg2.connect(self.db_url)
             cursor = conn.cursor()
             
             cursor.execute('SELECT COUNT(*) FROM crawled_items')
@@ -286,14 +308,13 @@ class DatabaseManager:
     def delete_old_data(self, days: int = 30):
         """删除指定天数之前的数据"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = psycopg2.connect(self.db_url)
             cursor = conn.cursor()
             
-            cutoff_date = datetime.now().strftime('%Y-%m-%d')
             cursor.execute('''
                 DELETE FROM crawled_items 
-                WHERE DATE(created_at) < DATE(?, '-' || ? || ' days')
-            ''', (cutoff_date, days))
+                WHERE created_at < NOW() - INTERVAL %s
+            ''', (f'{days} days',))
             
             deleted_count = cursor.rowcount
             conn.commit()
@@ -309,7 +330,7 @@ class DatabaseManager:
     def clear_all_data(self):
         """清除所有数据"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = psycopg2.connect(self.db_url)
             cursor = conn.cursor()
             
             cursor.execute('DELETE FROM crawled_items')
@@ -327,13 +348,19 @@ class DatabaseManager:
     def insert_crawler_instance(self, instance_id: str, crawler_name: str, instance_name: str, keywords: List[str], description: str = None) -> bool:
         """插入爬虫实例"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = psycopg2.connect(self.db_url)
             cursor = conn.cursor()
             
             cursor.execute('''
-                INSERT OR REPLACE INTO crawler_instances (
+                INSERT INTO crawler_instances (
                     id, crawler_name, instance_name, keywords, description, status
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    crawler_name = EXCLUDED.crawler_name,
+                    instance_name = EXCLUDED.instance_name,
+                    keywords = EXCLUDED.keywords,
+                    description = EXCLUDED.description,
+                    status = EXCLUDED.status
             ''', (
                 instance_id,
                 crawler_name,
@@ -353,14 +380,13 @@ class DatabaseManager:
     def get_crawler_instances(self, crawler_name: str = None) -> List[Dict[str, Any]]:
         """获取爬虫实例列表"""
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            conn = psycopg2.connect(self.db_url)
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             
             if crawler_name:
                 cursor.execute('''
                     SELECT * FROM crawler_instances 
-                    WHERE crawler_name = ?
+                    WHERE crawler_name = %s
                     ORDER BY created_at DESC
                 ''', (crawler_name,))
             else:
@@ -390,11 +416,10 @@ class DatabaseManager:
     def get_crawler_instance_by_name(self, instance_name: str) -> Optional[Dict[str, Any]]:
         """根据实例名称获取爬虫实例"""
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
+            conn = psycopg2.connect(self.db_url)
+            cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
             
-            cursor.execute('SELECT * FROM crawler_instances WHERE instance_name = ?', (instance_name,))
+            cursor.execute('SELECT * FROM crawler_instances WHERE instance_name = %s', (instance_name,))
             row = cursor.fetchone()
             
             if row:
@@ -404,6 +429,7 @@ class DatabaseManager:
                     instance['keywords'] = json.loads(instance['keywords'])
                 except:
                     instance['keywords'] = []
+                conn.close()
                 return instance
             
             conn.close()
@@ -415,13 +441,13 @@ class DatabaseManager:
     def update_crawler_instance_status(self, instance_id: str, status: str) -> bool:
         """更新爬虫实例状态"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = psycopg2.connect(self.db_url)
             cursor = conn.cursor()
             
             cursor.execute('''
                 UPDATE crawler_instances 
-                SET status = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                SET status = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
             ''', (status, instance_id))
             
             conn.commit()
@@ -434,10 +460,10 @@ class DatabaseManager:
     def delete_crawler_instance(self, instance_id: str) -> bool:
         """删除爬虫实例"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = psycopg2.connect(self.db_url)
             cursor = conn.cursor()
             
-            cursor.execute('DELETE FROM crawler_instances WHERE id = ?', (instance_id,))
+            cursor.execute('DELETE FROM crawler_instances WHERE id = %s', (instance_id,))
             
             conn.commit()
             conn.close()
@@ -449,7 +475,7 @@ class DatabaseManager:
     def clear_all_instances(self):
         """清除所有爬虫实例数据"""
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = psycopg2.connect(self.db_url)
             cursor = conn.cursor()
             
             cursor.execute('DELETE FROM crawler_instances')

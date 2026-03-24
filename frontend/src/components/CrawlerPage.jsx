@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Modal, Form, Input, message } from 'antd';
+import { Modal, Form, Input, Button, message } from 'antd';
 import { PlusOutlined, PlayCircleOutlined, StopOutlined, DeleteOutlined, LoadingOutlined } from '@ant-design/icons';
 
 function CrawlerPage() {
@@ -43,12 +43,26 @@ function CrawlerPage() {
 
 
   // 创建爬虫实例
-  const createCrawlerInstance = async (values) => {
-    if (!currentCrawler) return;
+  const createCrawlerInstance = async (values, crawlerName) => {
+    console.log('createCrawlerInstance called', { crawlerName, values });
+    
+    if (!crawlerName) {
+      message.error('请选择爬虫');
+      return;
+    }
     
     setLoading(true);
     try {
       const keywords = values.keywords.split(',').map(k => k.trim()).filter(k => k);
+
+      const description = values.description ? values.description.trim() : '';
+      
+      console.log('Sending request to create crawler instance', {
+        name: crawlerName,
+        instance_name: values.instance_name,
+        keywords: keywords,
+        description: description
+      });
 
       const response = await fetch('/api/create-crawler-instance', {
         method: 'POST',
@@ -56,22 +70,27 @@ function CrawlerPage() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          name: currentCrawler,
+          name: crawlerName,
           instance_name: values.instance_name,
           keywords: keywords,
-          description: values.description.trim()
+          description: description
         })
       });
 
+      console.log('Response received', response);
       const result = await response.json();
+      console.log('Response data', result);
+      
       if (result.success) {
         message.success(result.message);
-        fetchInstances(currentCrawler);
+        fetchInstances(crawlerName);
+        console.log('Closing modal');
         Modal.destroyAll();
       } else {
         message.error('创建实例失败: ' + result.error);
       }
     } catch (error) {
+      console.error('Error creating crawler instance', error);
       message.error('创建实例失败: ' + error.message);
     } finally {
       setLoading(false);
@@ -254,10 +273,10 @@ function CrawlerPage() {
                   {crawler.name}
                 </div>
                 <div className="crawler-controls">
-                  <button
-                    className="crawler-btn start"
+                  <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
                     onClick={() => {
-                      setCurrentCrawler(crawler.name);
                       form.resetFields();
                       Modal.info({
                         title: '创建爬虫实例',
@@ -265,7 +284,7 @@ function CrawlerPage() {
                           <Form
                             form={form}
                             layout="vertical"
-                            onFinish={createCrawlerInstance}
+                            onFinish={(values) => createCrawlerInstance(values, crawler.name)}
                           >
                             <Form.Item
                               name="instance_name"
@@ -290,24 +309,24 @@ function CrawlerPage() {
                           </Form>
                         ),
                         footer: [
-                          <button key="cancel" className="btn cancel" onClick={() => Modal.destroyAll()}>
+                          <Button key="cancel" danger onClick={() => Modal.destroyAll()}>
                             取消
-                          </button>,
-                          <button
+                          </Button>,
+                          <Button
                             key="submit"
-                            className="btn"
+                            type="primary"
                             onClick={() => form.submit()}
-                            disabled={loading}
+                            loading={loading}
                           >
-                            {loading ? <LoadingOutlined spin /> : '创建'}
-                          </button>,
+                            创建
+                          </Button>,
                         ],
                       });
                     }}
                     title="创建爬虫实例"
                   >
-                    <PlusOutlined />
-                  </button>
+                    创建
+                  </Button>
                 </div>
                 <div className="crawler-instances">
                   <h4>
