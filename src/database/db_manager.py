@@ -11,17 +11,11 @@ from src.models import CrawledItem
 class DatabaseManager:
     """数据库管理器，用于存储和查询爬取的数据"""
     
-    def __init__(self, db_path: str = "data/crawler.db"):
+    def __init__(self, db_path: str = ":memory:"):
         """初始化数据库连接"""
-        try:
-            # 尝试创建数据库目录
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
-            self.db_path = db_path
-            logger.info(f"使用文件数据库: {self.db_path}")
-        except OSError as e:
-            # 如果是只读文件系统，使用内存数据库
-            logger.warning(f"无法创建数据库目录，使用内存数据库: {e}")
-            self.db_path = ":memory:"
+        # 完全使用内存数据库，不再创建文件
+        self.db_path = ":memory:"
+        logger.info("使用内存数据库")
         
         self._init_database()
     
