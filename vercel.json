@@ -3,7 +3,10 @@
   "builds": [
     {
       "src": "src/app.py",
-      "use": "@vercel/python@3.9"
+      "use": "@vercel/python",
+      "config": {
+        "runtime": "python3.11"
+      }
     },
     {
       "src": "frontend/package.json",
