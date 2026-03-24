@@ -1,0 +1,1 @@
+# Scrapers directory for website-specific crawlers
