@@ -13,9 +13,16 @@ class DatabaseManager:
     
     def __init__(self, db_path: str = "data/crawler.db"):
         """初始化数据库连接"""
-        # 确保数据库目录存在
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        self.db_path = db_path
+        try:
+            # 尝试创建数据库目录
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            self.db_path = db_path
+            logger.info(f"使用文件数据库: {self.db_path}")
+        except OSError as e:
+            # 如果是只读文件系统，使用内存数据库
+            logger.warning(f"无法创建数据库目录，使用内存数据库: {e}")
+            self.db_path = ":memory:"
+        
         self._init_database()
     
     def _init_database(self):
