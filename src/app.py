@@ -14,11 +14,7 @@ import utils
 import routes
 from src.crawler.crawler_manager import CrawlerManager
 
-# 配置日志，将所有日志写入一个文件
-log_file = os.path.join("logs", "app.log")
-logger.add(log_file, format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}", level="INFO", rotation="1 day", retention="7 days")
-
-# 初始化日志收集器
+# 初始化日志收集器，日志只输出到控制台
 log_collector = utils.LogCollector()
 logger.add(lambda msg: log_collector.add_log(msg), format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}")
 
